@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>校园地图导览 - 果冻小人的四站之旅</title>
+  <style>
+    /* ===================== 小主可编辑区域：每个地点弹窗背景 ===================== */
+    :root {
+      /* 每个地点的弹窗背景：可改成颜色、渐变色或图片 */
+      --bg-stop-1: linear-gradient(135deg, #2a2a45 0%, #1e1e36 100%);
+      --bg-stop-2: linear-gradient(135deg, #1e3640 0%, #152830 100%);
+      --bg-stop-3: linear-gradient(135deg, #3a2a3a 0%, #261a2a 100%);
+      --bg-stop-4: linear-gradient(135deg, #2a3a2a 0%, #1a281a 100%);
+    }
+    /* ========================================================================== */
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #101021;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      color: #fff;
+    }
+
+    h1 {
+      color: #f0b86a;
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    .subtitle {
+      color: #d4c9a8;
+      font-size: 14px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #f0b86a, #d49a4b);
+      border: none;
+      border-radius: 24px;
+      padding: 10px 22px;
+      color: #1a1a2e;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 14px rgba(240, 184, 106, 0.3);
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(240, 184, 106, 0.45);
+    }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .map-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 1200px;
+      aspect-ratio: 1590 / 1125;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      background: #87b2d6;
+    }
+
+    .map-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+    }
+
+    /* 路径提示虚线 */
+    .path-line {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+      display: none; /* 隐藏路程线；如需显示改回 block */
+    }
+    .path-line polyline {
+      fill: none;
+      stroke: rgba(240, 184, 106, 0.55);
+      stroke-width: 2.5;
+      stroke-dasharray: 6 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .jelly {
+      position: absolute;
+      width: 6.5%;
+      min-width: 44px;
+      max-width: 86px;
+      aspect-ratio: 280 / 302;
+      z-index: 20;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+      pointer-events: none;
+      transition: none;
+    }
+    .jelly img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .jelly.bobbing {
+      animation: bob 0.55s ease-in-out infinite alternate;
+    }
+    @keyframes bob {
+      from { transform: translate(-50%, -55%) scale(1); }
+      to   { transform: translate(-50%, -45%) scale(1.06); }
+    }
+
+    /* 停靠点 */
+    .stop-zone {
+      position: absolute;
+      width: 7.5%;
+      height: 10%;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 15;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .stop-zone::before {
+      content: attr(data-label);
+      position: absolute;
+      top: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(240, 184, 106, 0.92);
+      color: #1a1a2e;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 14px;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+    }
+    .stop-zone::after {
+      content: '';
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 2px dashed rgba(255,255,255,0.55);
+      background: rgba(255,255,255,0.12);
+      transition: background 0.25s, border-color 0.25s;
+    }
+    .stop-zone:hover::after,
+    .stop-zone.active::after {
+      background: rgba(255,255,255,0.28);
+      border-color: rgba(240, 184, 106, 0.9);
+    }
+    .stop-zone.active {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(240, 184, 106, 0.45); }
+      50% { box-shadow: 0 0 0 14px rgba(240, 184, 106, 0); }
+    }
+
+    /* 提示文字 */
+    .hint {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      color: #f0e6c8;
+      z-index: 8;
+      max-width: 280px;
+      line-height: 1.55;
+    }
+
+    /* 弹窗 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 8, 18, 0.78);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+    .modal-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      width: 92%;
+      max-width: 640px;
+      max-height: 80vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(240, 184, 106, 0.35);
+      border-radius: 22px;
+      box-shadow: 0 25px 70px rgba(0,0,0,0.55);
+      transform: translateY(20px) scale(0.96);
+      transition: transform 0.35s ease, background 0.3s;
+    }
+    .modal-overlay.show .modal {
+      transform: translateY(0) scale(1);
+    }
+    .modal-header {
+      padding: 22px 26px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .modal-header h2 {
+      color: #f0b86a;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .modal-body {
+      padding: 18px 26px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-body p {
+      color: #f2eee3;
+      line-height: 1.85;
+      font-size: 15px;
+      margin-bottom: 14px;
+    }
+    .modal-body p.song {
+      font-style: italic;
+      letter-spacing: 0.5px;
+      opacity: 0.92;
+      padding: 10px 14px;
+      border-left: 3px solid rgba(240,184,106,0.8);
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+    }
+    .modal-body ul, .modal-body ol {
+      margin-left: 20px;
+      margin-bottom: 14px;
+      color: #f2eee3;
+      line-height: 1.75;
+    }
+    .modal-body li {
+      margin-bottom: 6px;
+    }
+    .modal-footer {
+      padding: 14px 26px 22px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .modal-footer .btn.secondary {
+      background: transparent;
+      color: #f0b86a;
+      border: 1px solid rgba(240, 184, 106, 0.5);
+      box-shadow: none;
+    }
+    .modal-footer .btn.secondary:hover {
+      background: rgba(240, 184, 106, 0.12);
+    }
+
+    .status {
+      margin-top: 14px;
+      font-size: 14px;
+      color: #c7c7c7;
+      min-height: 20px;
+      text-align: center;
+    }
+
+    /* 动态背景类，由 JS 根据当前 stop 切换 */
+    .modal.stop-1 { background: var(--bg-stop-1); }
+    .modal.stop-2 { background: var(--bg-stop-2); }
+    .modal.stop-3 { background: var(--bg-stop-3); }
+    .modal.stop-4 { background: var(--bg-stop-4); }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 20px; }
+      .modal { max-height: 86vh; }
+      .modal-header h2 { font-size: 18px; }
+      .modal-body p { font-size: 14px; }
+    }
+
+    /* ===================== 编辑面板 ===================== */
+    .editor-toggle {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 200;
+      background: linear-gradient(135deg, #f0b86a, #d49a4b);
+      color: #1a1a2e;
+      border: none;
+      border-radius: 28px;
+      padding: 12px 20px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(240,184,106,0.45);
+    }
+    .editor-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 420px;
+      max-width: 92vw;
+      height: 100vh;
+      background: #14142a;
+      border-left: 1px solid rgba(240,184,106,0.35);
+      box-shadow: -12px 0 40px rgba(0,0,0,0.5);
+      z-index: 210;
+      transform: translateX(105%);
+      transition: transform 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      color: #eee;
+    }
+    .editor-panel.open { transform: translateX(0); }
+    .editor-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1c1c3a;
+    }
+    .editor-head h3 { color: #f0b86a; font-size: 18px; }
+    .editor-head .close { background: none; border: none; color: #bbb; font-size: 22px; cursor: pointer; }
+    .editor-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+    .editor-card {
+      background: #1f1f3d;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .editor-card label {
+      display: block;
+      font-weight: 700;
+      color: #f0b86a;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .editor-card input.title-input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: #14142a;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .editor-card textarea.content-input {
+      width: 100%;
+      min-height: 90px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: #14142a;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      font-family: inherit;
+    }
+    .editor-card .bg-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .editor-card .bg-row span { font-size: 12px; color: #bbb; }
+    .editor-card .bg-row input[type=color] {
+      width: 38px; height: 28px; border: none; background: none; cursor: pointer;
+    }
+    .editor-card .bg-img-row {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .editor-card .bg-img-row .file-label {
+      font-size: 12px; color: #bbb;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .editor-card .bg-img-row input[type=file] {
+      font-size: 12px; color: #ccc;
+      max-width: 100%;
+    }
+    .editor-card .bg-preview {
+      display: none;
+      width: 100%;
+      max-height: 92px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .editor-card .bg-preview.show { display: block; }
+    .editor-card .bg-clear {
+      align-self: flex-start;
+      background: transparent;
+      color: #ff9a9a;
+      border: 1px solid rgba(255,120,120,0.5);
+      border-radius: 16px;
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .editor-card .bg-clear:hover { background: rgba(255,120,120,0.12); }
+    .editor-card .bg-audio-row {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .editor-card .bg-audio-row .file-label {
+      font-size: 12px; color: #bbb;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .editor-card .bg-audio-row input[type=file] {
+      font-size: 12px; color: #ccc; max-width: 100%;
+    }
+    .editor-card .bg-audio-clear {
+      align-self: flex-start;
+      background: transparent;
+      color: #9ad0ff;
+      border: 1px solid rgba(120,180,255,0.5);
+      border-radius: 16px;
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .editor-card .bg-audio-clear:hover { background: rgba(120,180,255,0.12); }
+    .editor-foot {
+      padding: 14px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .editor-foot .btn.secondary { background: transparent; color: #f0b86a; border: 1px solid rgba(240,184,106,0.5); box-shadow: none; }
+    .editor-foot .btn.secondary:hover { background: rgba(240,184,106,0.12); }
+    .editor-tip { font-size: 12px; color: #9a9a9a; margin-bottom: 12px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>🎓 果冻小人的北语四站之旅</h1>
+  <div class="subtitle">西门 → 圈一 → 圈二 → 圈四 → 圈三 → 东门</div>
+
+  <div class="top-bar">
+    <button class="btn" id="startBtn">开始行走</button>
+    <button class="btn" id="resetBtn">重置</button>
+    <button class="btn secondary" id="skipBtn" disabled>继续下一站</button>
+  </div>
+
+  <button class="editor-toggle" id="editorToggle">✏️ 编辑文本</button>
+
+  <!-- 编辑面板 -->
+  <div class="editor-panel" id="editorPanel">
+    <div class="editor-head">
+      <h3>✏️ 编辑文本内容</h3>
+      <button class="close" id="editorClose">×</button>
+    </div>
+    <div class="editor-body">
+      <p class="editor-tip">改好标题和正文后，点 <b>「保存并下载定稿」</b> —— 会<b>立刻下载</b>一个 <b>校园地图_定稿.html</b> 文件，里面已经写好你的文字、背景和音乐。<b>以后就用这个下载好的文件</b>（它也带编辑功能，可继续改、再导出）。<br>选「弹窗背景色」或上传「背景图」（图片优先，自动加暗色遮罩保证文字清晰）；正文支持 &lt;p&gt;、&lt;strong&gt;、&lt;ul&gt;&lt;li&gt; 等简单标签。</p>
+      <div id="editorCards"></div>
+    </div>
+    <div class="editor-foot">
+      <button class="btn secondary" id="editorReset">恢复默认</button>
+      <button class="btn secondary" id="editorCancel">关闭</button>
+      <button class="btn secondary" id="editorCacheOnly">仅本机暂存</button>
+      <button class="btn" id="editorSave">保存并下载定稿</button>
+    </div>
+  </div>
+
+  <div class="map-wrapper" id="mapWrapper">
+    <img class="map-bg" src="school-map.jpg" alt="北京语言大学平面图">
+
+    <!-- 路径提示虚线 -->
+    <svg class="path-line" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <polyline id="pathPoly" points="" />
+    </svg>
+
+    <!-- 四个停靠点：位于红线尽头/建筑位置，圈号与图片一致 -->
+    <div class="stop-zone" id="stop1" data-index="0" data-label="圈一" style="left:13%; top:27%;"></div>
+    <div class="stop-zone" id="stop2" data-index="1" data-label="圈二" style="left:49%; top:36%;"></div>
+    <div class="stop-zone" id="stop3" data-index="2" data-label="圈三" style="left:49%; top:58%;"></div>
+    <div class="stop-zone" id="stop4" data-index="3" data-label="圈四" style="left:64%; top:44%;"></div>
+
+    <!-- 果冻小人 -->
+    <div class="jelly" id="jelly">
+      <img src="jelly.png" alt="果冻小人">
+    </div>
+
+    <div class="hint">💡 小人会自动在四个地点停下。到达后点击发光圆圈查看介绍，关闭弹窗后点「继续下一站」。</div>
+  </div>
+
+  <div class="status" id="status">点击「开始行走」，果冻小人从西门出发 👣</div>
+
+  <!-- 弹窗 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">标题</h2>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- 内容动态填充 -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" id="closeModalBtn">关闭</button>
+        <button class="btn" id="continueModalBtn">继续下一站</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===================== 小主可编辑区域：每个地点的标题和正文 =====================
+    // 支持多段文字、列表、加粗等简单 HTML。想改弹窗背景请到上方 :root 里改 CSS 变量。
+    const stops = [
+      {
+        title: 'The public bath',
+        content: `
+          <p>Located in the northwest of BLCU, the bathhouse is offered for students to take a bath.</p>
+          <p>It opens from 16:30 p.m. to 23:30 p.m. The bathhouse provides cabinets for students to store clothes and the driers to blow hair. But driers might be a little crowded to use during peak hours, so you can bring your own hair dryer. Don't forget to bring your ID card. Hot water for showers is only available by swiping your card.</p>
+        `
+      },
+      {
+        title: 'Library',
+        content: `
+          <p>The library is a wonderful place if you want to have a good learning atmosphere.</p>
+          <p>The library is located near the south gate of the school and opens from 7:00 to 23:00. You can reach it by walking straight from the south gate. You can search for the books you need even borrowing them, focus on your studies, discuss problems in the designated places and so on. Remember to bring your student ID card if you want to go here.</p>
+        `
+      },
+      {
+        title: 'Mixue Ice Cream & Tea',
+        content: `
+          <p>Mixue Ice Cream &amp; Tea is a well-known shop in BLCU.</p>
+          <p>The store offers affordable drinks and ice cream, with most items priced under 10 yuan. Popular choices include the Fresh Lemonade, Fresh Ice Cream, and Milk Tea. Moreover, it is known for its store song:</p>
+          <p class="song">I love you<br>You love me<br>MIXUE Ice cream and tea<br>I love you<br>You love me<br>MIXUE Ice cream and tea.</p>
+        `
+      },
+      {
+        title: 'The Plane Tree Avenue',
+        content: `
+          <p>Do you know a place where if you finish walking along it, you will have toured the whole school? It is the avenue lined with plane trees that connects people from all over the world.</p>
+          <p>Running through the east and west of the school, Plane Tree Avenue is open to walkers all day. But in the evening, cars are stopped from passing at some crossings.</p>
+          <p>It is an avenue you will pass every day, if your destination is the classroom. The Plane Tree Avenue is where you can enjoy the sunshine at dawn and breathe fresh air. The annual World Culture Festival is held on this avenue, where you can learn about various colorful cultures and make like-minded friends.</p>
+          <p>This place is very crowded during peak hours, so try to set off earlier. If you unfortunately hit the rush hour, watch your step, or you may fall down.</p>
+        `
+      }
+    ];
+    // ==========================================================================
+
+    const jelly = document.getElementById('jelly');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const status = document.getElementById('status');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const continueModalBtn = document.getElementById('continueModalBtn');
+    const pathPoly = document.getElementById('pathPoly');
+    const stopEls = [
+      document.getElementById('stop1'),
+      document.getElementById('stop2'),
+      document.getElementById('stop3'),
+      document.getElementById('stop4')
+    ];
+
+    // 行进路径：西门 → 圈一（Dormitory 14 下方红楼） → 圈二 → 圈三（食堂） → 圈四（十字路口） → 东门
+    // 路径严格沿地图上的白色道路走，不跨楼、不穿越绿地
+    const waypoints = [
+      { x: 8.0,  y: 78.0 },  // 0  西门（图标直接在西门）
+      { x: 8.0,  y: 72.0 },  // 1  沿左侧主路向上
+      { x: 8.0,  y: 66.0 },  // 2
+      { x: 8.0,  y: 60.0 },  // 3
+      { x: 8.0,  y: 54.0 },  // 4
+      { x: 8.0,  y: 48.0 },  // 5
+      { x: 8.0,  y: 42.0 },  // 6
+      { x: 8.0,  y: 36.0 },  // 7  到顶路高度
+      { x: 10.0, y: 33.0 },  // 8  右转进圈一
+      { x: 11.0, y: 31.0 },  // 9
+      { x: 12.0, y: 29.0 },  // 10
+      { x: 13.0, y: 27.0 },  // 11 圈一（Dormitory 14 下方红楼 / 先上后右）
+      { x: 12.0, y: 27.0 },  // 12 出圈一沿纵向路向北到顶路
+      { x: 16.0, y: 27.0 },  // 13 沿顶路向东
+      { x: 20.0, y: 27.0 },  // 14
+      { x: 24.0, y: 27.0 },  // 15
+      { x: 28.0, y: 27.0 },  // 16
+      { x: 32.0, y: 27.0 },  // 17
+      { x: 36.0, y: 27.0 },  // 18
+      { x: 40.0, y: 27.0 },  // 19
+      { x: 43.0, y: 27.0 },  // 20
+      { x: 45.0, y: 27.0 },  // 21
+      { x: 47.0, y: 27.0 },  // 22
+      { x: 48.0, y: 28.0 },  // 23 到图书馆上方路口
+      { x: 49.0, y: 32.0 },  // 24 沿图书馆西侧路向南
+      { x: 49.0, y: 36.0 },  // 25 圈二（Library / 红线尽头）
+      { x: 49.0, y: 40.0 },  // 26 出图书馆向南
+      { x: 49.0, y: 44.0 },  // 27
+      { x: 49.0, y: 48.0 },  // 28
+      { x: 49.0, y: 52.0 },  // 29
+      { x: 49.0, y: 55.0 },  // 30
+      { x: 49.0, y: 58.0 },  // 31 圈三（Dining Hall / 红线尽头）
+      { x: 52.0, y: 58.0 },  // 32 沿横路向东
+      { x: 56.0, y: 58.0 },  // 33
+      { x: 60.0, y: 58.0 },  // 34
+      { x: 64.0, y: 58.0 },  // 35 转入教学楼东侧纵向路
+      { x: 64.0, y: 54.0 },  // 36 沿纵向路向北
+      { x: 64.0, y: 50.0 },  // 37
+      { x: 64.0, y: 47.0 },  // 38
+      { x: 64.0, y: 44.0 },  // 39 圈四（十字路口 / 红线尽头）
+      { x: 64.0, y: 40.0 },  // 40 继续向北到顶部横路
+      { x: 64.0, y: 36.0 },  // 41
+      { x: 64.0, y: 32.0 },  // 42
+      { x: 64.0, y: 28.0 },  // 43 转入顶部横路
+      { x: 68.0, y: 28.0 },  // 44 向东门
+      { x: 72.0, y: 28.0 },  // 45
+      { x: 76.0, y: 27.0 },  // 46
+      { x: 82.0, y: 27.0 },  // 47
+      { x: 88.0, y: 27.0 },  // 48
+      { x: 94.0, y: 26.0 },  // 49
+      { x: 95.0, y: 26.0 },  // 50 东门终点
+    ];
+
+    const stopIndices = [11, 25, 31, 39]; // 圈一、圈二、圈三（食堂）、圈四（十字路口） 在 waypoints 中的索引
+
+    // 把路径画成虚线
+    pathPoly.setAttribute('points', waypoints.map(p => `${p.x},${p.y}`).join(' '));
+
+    let currentWaypoint = 0;
+    let currentStopIndex = -1; // -1 表示还没到达任何停靠点
+    let isMoving = false;
+    let isFinished = false;
+    let animationId = null;
+    let pendingContinue = false;
+    let modalStopIndex = -1; // 当前弹窗正在展示的停靠点索引（-1 表示未打开）
+
+    function setPosition(pos) {
+      jelly.style.left = pos.x + '%';
+      jelly.style.top = pos.y + '%';
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function distance(p1, p2) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    function highlightStop(index) {
+      stopEls.forEach((el, i) => {
+        el.classList.toggle('active', i === index);
+      });
+    }
+
+    function clearHighlights() {
+      stopEls.forEach(el => el.classList.remove('active'));
+    }
+
+    function openModal(index) {
+      if (index !== 2) stopAllAudio(); // 打开非圈三的弹窗时停掉音乐
+      const stop = stops[index];
+      modalTitle.textContent = stop.title;
+      modalBody.innerHTML = stop.content;
+      modal.className = 'modal stop-' + (index + 1);
+      modalOverlay.classList.add('show');
+      modalStopIndex = index;
+    }
+
+    function closeModal() {
+      modalOverlay.classList.remove('show');
+      modalStopIndex = -1;
+      stopAllAudio(); // 关闭弹窗即停止音乐
+    }
+
+    function arriveAtStop(stopIdx) {
+      isMoving = false;
+      currentStopIndex = stopIdx;
+      pendingContinue = true;
+      jelly.classList.remove('bobbing');
+      highlightStop(stopIdx);
+      skipBtn.disabled = false;
+      status.textContent = `到达${stops[stopIdx].title.split('·')[0]}，点击圆圈或「继续下一站」继续`;
+
+      // 到达时果冻小人在目标点轻微弹跳
+      jelly.animate([
+        { transform: 'translate(-50%, -50%) scale(1)' },
+        { transform: 'translate(-50%, -62%) scale(1.12)' },
+        { transform: 'translate(-50%, -50%) scale(1)' }
+      ], {
+        duration: 400,
+        iterations: 2,
+        easing: 'ease-in-out'
+      });
+
+      // 圈四（stop index 3）是实际路线上的最后一站，之后前往东门终点
+      if (stopIdx === 3) {
+        continueModalBtn.textContent = '前往东门终点';
+      } else {
+        continueModalBtn.textContent = '继续下一站';
+      }
+    }
+
+    function finishJourney() {
+      isMoving = false;
+      isFinished = true;
+      pendingContinue = false;
+      currentStopIndex = -1;
+      clearHighlights();
+      skipBtn.disabled = true;
+      jelly.classList.remove('bobbing');
+      setPosition(waypoints[waypoints.length - 1]);
+      status.textContent = '旅程结束！果冻小人已到达东门 🎉 点击「重置」可重新开始。';
+    }
+
+    function startMoving() {
+      if (isMoving) return;
+      isMoving = true;
+      pendingContinue = false;
+      jelly.classList.add('bobbing');
+      skipBtn.disabled = true;
+      clearHighlights();
+      status.textContent = '果冻小人正在路上……';
+
+      const speed = 0.16; // 每帧移动距离（百分比空间中的速度）
+
+      function step() {
+        if (!isMoving) return;
+
+        if (currentWaypoint >= waypoints.length - 1) {
+          finishJourney();
+          return;
+        }
+
+        const p1 = waypoints[currentWaypoint];
+        const p2 = waypoints[currentWaypoint + 1];
+        const segLen = distance(p1, p2);
+
+        // 用进度记录，避免浮点累积
+        if (!window.segmentProgress) window.segmentProgress = 0;
+        const stepSize = speed / Math.max(segLen, 0.1);
+        window.segmentProgress += stepSize;
+
+        if (window.segmentProgress >= 1) {
+          window.segmentProgress = 0;
+          currentWaypoint++;
+          setPosition(waypoints[currentWaypoint]);
+
+          // 检查是否到达停靠点
+          const stopIdx = stopIndices.indexOf(currentWaypoint);
+          if (stopIdx !== -1) {
+            arriveAtStop(stopIdx);
+            return; // 停下等待用户点击
+          }
+
+          if (currentWaypoint >= waypoints.length - 1) {
+            finishJourney();
+            return;
+          }
+        } else {
+          const t = window.segmentProgress;
+          const pos = {
+            x: lerp(p1.x, p2.x, t),
+            y: lerp(p1.y, p2.y, t)
+          };
+          setPosition(pos);
+        }
+
+        animationId = requestAnimationFrame(step);
+      }
+
+      window.segmentProgress = 0;
+      animationId = requestAnimationFrame(step);
+    }
+
+    function continueJourney() {
+      if (!pendingContinue) return;
+      if (currentStopIndex === -1) return;
+      pendingContinue = false;
+      currentStopIndex = -1;
+      startMoving();
+    }
+
+    function startTour() {
+      if (isMoving || isFinished || currentWaypoint > 0) return;
+      currentWaypoint = 0;
+      currentStopIndex = -1;
+      startMoving();
+    }
+
+    function resetTour() {
+      isMoving = false;
+      isFinished = false;
+      pendingContinue = false;
+      currentStopIndex = -1;
+      currentWaypoint = 0;
+      window.segmentProgress = 0;
+      cancelAnimationFrame(animationId);
+      jelly.classList.remove('bobbing');
+      clearHighlights();
+      stopAllAudio();
+      setPosition(waypoints[0]);
+      skipBtn.disabled = true;
+      status.textContent = '已重置到西门，点击「开始行走」出发 👣';
+    }
+
+    // 事件绑定
+    startBtn.addEventListener('click', startTour);
+    resetBtn.addEventListener('click', resetTour);
+    skipBtn.addEventListener('click', continueJourney);
+    continueModalBtn.addEventListener('click', () => {
+      closeModal();
+      continueJourney();
+    });
+    closeModalBtn.addEventListener('click', closeModal);
+
+    stopEls.forEach((el, idx) => {
+      el.addEventListener('click', () => {
+        openModal(idx);
+        if (idx === 2) {
+          playStopAudio(2); // 点圈三：播放上传音乐，或示例旋律
+        } else {
+          stopAllAudio();
+        }
+      });
+    });
+
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    // ===================== 编辑面板逻辑 =====================
+    const editorToggle = document.getElementById('editorToggle');
+    const editorPanel  = document.getElementById('editorPanel');
+    const editorClose  = document.getElementById('editorClose');
+    const editorCancel = document.getElementById('editorCancel');
+    const editorSave   = document.getElementById('editorSave');
+    const editorCards  = document.getElementById('editorCards');
+
+    // 每个停靠点弹窗背景的基础色（颜色选择器控制）。弹窗背景用它生成斜向渐变。
+    const stopColors = ['#2a2a45', '#1e3640', '#3a2a3a', '#2a3a2a'];
+    // 每个停靠点的背景图（data URI），为空则使用纯色渐变；图片优先于纯色。
+    const stopImages = ['bg1.jpg', 'bg2.jpg', 'bg3.jpg', 'bg4.jpg'];
+    // 每个停靠点的背景音乐（data URI），为空则无；仅在圈三（index 2）启用
+    const stopAudio = [null, null, null, null];
+
+    // 把 hex 颜色按比例调暗，用于生成渐变的第二色
+    function darkenHex(hex, factor) {
+      hex = hex.replace('#', '');
+      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      const nr = Math.round(r * factor), ng = Math.round(g * factor), nb = Math.round(b * factor);
+      return `rgb(${nr}, ${ng}, ${nb})`;
+    }
+
+    // 把第 i 站的背景写入 CSS 变量：有图用图（加暗色遮罩保证可读），否则用纯色渐变
+    function applyStopBg(i) {
+      const img = stopImages[i];
+      if (img) {
+        const layered = `linear-gradient(rgba(8,8,18,0.60), rgba(8,8,18,0.60)), url("${img}") center / cover no-repeat`;
+        document.documentElement.style.setProperty('--bg-stop-' + (i + 1), layered);
+      } else {
+        const base = stopColors[i];
+        const grad = `linear-gradient(135deg, ${base} 0%, ${darkenHex(base, 0.75)} 100%)`;
+        document.documentElement.style.setProperty('--bg-stop-' + (i + 1), grad);
+      }
+    }
+
+    // ===================== 圈三背景音乐 =====================
+    const audioEl = new Audio();
+
+    function stopAllAudio() {
+      audioEl.pause();
+      audioEl.currentTime = 0;
+      stopSynth();
+    }
+
+    // 点圈三时调用：有上传音频则播放之，否则播放示例旋律
+    function playStopAudio(i) {
+      stopAllAudio();
+      if (stopAudio[i]) {
+        audioEl.src = stopAudio[i];
+        audioEl.loop = true;
+        audioEl.play().catch(() => {}); // 浏览器策略：需用户手势，点圈三即为手势
+      } else if (i === 2) {
+        playMixueDemo(); // 未上传时的示例（公有领域曲调，可上传真实歌曲替换）
+      }
+    }
+
+    // —— 示例旋律：用 Web Audio 合成《Clementine》片段（公有领域，蜜雪曲调来源）——
+    let synthCtx = null, synthMaster = null, synthTimer = null;
+    const NOTE = { E4:329.63, G4:392.00, A4:440.00, C5:523.25, D5:587.33, F4:349.23 };
+    const DEMO_SEQ = [
+      ['G4',0.34],['G4',0.34],['G4',0.34],['G4',0.34],
+      ['A4',0.34],['G4',0.34],['E4',0.68],
+      ['G4',0.34],['G4',0.34],['G4',0.34],['G4',0.34],
+      ['A4',0.34],['G4',0.34],['E4',0.68]
+    ];
+    function ensureSynth() {
+      if (!synthCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        synthCtx = new AC();
+        synthMaster = synthCtx.createGain();
+        synthMaster.gain.value = 0.22;
+        synthMaster.connect(synthCtx.destination);
+      }
+      if (synthCtx.state === 'suspended') synthCtx.resume();
+    }
+    function playMixueDemo() {
+      try {
+        ensureSynth();
+        const ctx = synthCtx;
+        const total = DEMO_SEQ.reduce((s, [, d]) => s + d, 0);
+        let t = ctx.currentTime + 0.05;
+        function pass() {
+          DEMO_SEQ.forEach(([n, d]) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'triangle';
+            o.frequency.value = NOTE[n];
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(1, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+            o.connect(g); g.connect(synthMaster);
+            o.start(t); o.stop(t + d + 0.05);
+            t += d;
+          });
+          synthTimer = setTimeout(pass, total * 1000);
+        }
+        pass();
+      } catch (e) { /* 忽略音频不支持的环境 */ }
+    }
+    function stopSynth() {
+      if (synthTimer) { clearTimeout(synthTimer); synthTimer = null; }
+      if (synthMaster) {
+        synthMaster.gain.cancelScheduledValues(synthCtx.currentTime);
+        synthMaster.gain.setValueAtTime(0, synthCtx.currentTime);
+      }
+    }
+    // ======================================================================
+
+    // ===================== 本地保存（刷新不丢） =====================
+    const STORAGE_KEY = 'beili_map_edits_v2'; // v2：作废旧缓存，避免旧编辑盖掉已烘焙进文件的内容
+
+    function persistEdits() {
+      try {
+        const data = {
+          stops:  stops.map(s => ({ title: s.title, content: s.content })),
+          colors: stopColors,
+          images: stopImages,
+          audio:  stopAudio
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {
+        // 多为图片/音乐过大超过浏览器本地容量上限
+        alert('本地保存失败：内容（尤其是音乐文件）可能过大，浏览器存不下了。\n建议缩短音乐，或让我把定稿直接写进 HTML 文件（永久固化）。');
+      }
+    }
+
+    function loadEdits() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.stops)  data.stops.forEach((s, i) => { if (stops[i]) { stops[i].title = s.title; stops[i].content = s.content; } });
+        if (data.colors) data.colors.forEach((c, i) => { if (i < stopColors.length) stopColors[i] = c; });
+        if (data.images) data.images.forEach((im, i) => { if (i < stopImages.length) stopImages[i] = im; });
+        if (data.audio)  data.audio.forEach((a, i) => { if (i < stopAudio.length) stopAudio[i] = a; });
+      } catch (e) { /* 忽略损坏数据 */ }
+    }
+    // ======================================================================
+
+    // ===================== 导出定稿（烘焙成单文件 HTML） =====================
+    function commitEditorInputs() {
+      // 把编辑面板里尚未保存的标题/正文/颜色先读入内存
+      editorCards.querySelectorAll('input, textarea').forEach(inp => {
+        const i = parseInt(inp.dataset.i, 10);
+        const f = inp.dataset.field;
+        if (f === 'title') stops[i].title = inp.value;
+        else if (f === 'content') stops[i].content = inp.value;
+        else if (f === 'color') stopColors[i] = inp.value;
+      });
+    }
+
+    function exportBakedHTML() {
+      commitEditorInputs();
+
+      const scriptEl = document.querySelector('script');
+      let scriptSrc = scriptEl.textContent;
+
+      // 用当前内存里的值替换源码中的四个数组
+      scriptSrc = scriptSrc.replace(
+        /const stops = \[[\s\S]*?\];\n/,
+        'const stops = ' + JSON.stringify(stops, null, 2).replace(/<\//g, '<\\/') + ';\n'
+      );
+      scriptSrc = scriptSrc.replace(
+        /const stopColors = \[[^\]]*\];/,
+        'const stopColors = ' + JSON.stringify(stopColors) + ';'
+      );
+      scriptSrc = scriptSrc.replace(
+        /const stopImages = \[[^\]]*\];/,
+        'const stopImages = ' + JSON.stringify(stopImages) + ';'
+      );
+      scriptSrc = scriptSrc.replace(
+        /const stopAudio = \[[^\]]*\];/,
+        'const stopAudio = ' + JSON.stringify(stopAudio) + ';'
+      );
+      // 防止内容里的 <\/script> 截断脚本
+      scriptSrc = scriptSrc.replace(/<\/script>/gi, '<\\/script>');
+
+      // 内联底图与果冻（用已加载的 <img> 转 data URI，保证单文件不缺图）
+      function inlineImg(sel, mime) {
+        const img = document.querySelector(sel);
+        if (!img) return null;
+        if (!img.complete || !img.naturalWidth) return null; // 图没加载成功就跳过，避免产出坏文件
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        return c.toDataURL(mime);
+      }
+      const mapURI = inlineImg('.map-bg', 'image/jpeg');
+      const jellyURI = inlineImg('#jelly img', 'image/png');
+
+      let bodyHTML = document.body.innerHTML;
+      bodyHTML = bodyHTML.replace(/<script>[\s\S]*?<\/script>/, '<script>' + scriptSrc + '<\/script>');
+      if (mapURI) bodyHTML = bodyHTML.replace(/src="[^"]*school-map[^"]*"/, 'src="' + mapURI + '"');
+      if (jellyURI) bodyHTML = bodyHTML.replace(/src="[^"]*jelly[^"]*"/, 'src="' + jellyURI + '"');
+
+      const full = '<!DOCTYPE html>\n<html lang="zh-CN">\n' + document.head.outerHTML + '\n' + bodyHTML + '\n</html>';
+
+      const blob = new Blob([full], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '校园地图_定稿.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }
+    // ======================================================================
+
+    // 启动时先从本地恢复上次编辑（文本 / 颜色 / 图片 / 音乐）
+    loadEdits();
+
+    // 初始化弹窗背景（覆盖 :root 里的默认值，使颜色选择器与显示一致）
+    stopColors.forEach((_, i) => applyStopBg(i));
+
+    // 转义，防止编辑内容里的 < > & 破坏面板结构
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/"/g, '&quot;');
+    }
+
+    // 动态生成四张编辑卡片（标题 / 正文 / 背景色 / 背景图）
+    function buildEditorCards() {
+      editorCards.innerHTML = '';
+      stops.forEach((stop, i) => {
+        const card = document.createElement('div');
+        card.className = 'editor-card';
+        const hasImg = !!stopImages[i];
+        card.innerHTML = `
+          <label>第 ${i + 1} 站 · ${stopEls[i].dataset.label}</label>
+          <input class="title-input" type="text" value="${escapeAttr(stop.title)}" data-i="${i}" data-field="title">
+          <textarea class="content-input" data-i="${i}" data-field="content">${escapeHtml(stop.content)}</textarea>
+          <div class="bg-row">
+            <span>弹窗背景色</span>
+            <input type="color" value="${stopColors[i]}" data-i="${i}" data-field="color">
+          </div>
+          <div class="bg-img-row">
+            <span class="file-label">背景图（可选，优先于纯色）</span>
+            <input type="file" accept="image/*" class="bg-img-input" data-i="${i}">
+            <img class="bg-preview ${hasImg ? 'show' : ''}" src="${hasImg ? stopImages[i] : ''}" alt="背景预览">
+            <button type="button" class="bg-clear" data-i="${i}" ${hasImg ? '' : 'style="display:none"'}>清除图片，用回纯色</button>
+          </div>
+          ${i === 2 ? `
+          <div class="bg-audio-row">
+            <span class="file-label">🎵 圈三背景音乐（点此站时播放，可选）</span>
+            <input type="file" accept="audio/*" class="bg-audio-input" data-i="${i}">
+            <button type="button" class="bg-audio-clear" data-i="${i}" ${stopAudio[i] ? '' : 'style="display:none"'}>移除音乐</button>
+          </div>
+          ` : ''}
+        `;
+        editorCards.appendChild(card);
+      });
+
+      // 绑定每张卡片的图片上传与清除
+      editorCards.querySelectorAll('.bg-img-input').forEach(inp => {
+        inp.addEventListener('change', (e) => {
+          const i = parseInt(inp.dataset.i, 10);
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            // 先在内存里把图缩放到宽度 ≤1280px 并转 JPEG，避免 data URI 过大撑爆单文件
+            const imgEl = new Image();
+            imgEl.onload = () => {
+              let w = imgEl.width, h = imgEl.height;
+              const maxW = 1280;
+              if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+              const out = canvas.toDataURL('image/jpeg', 0.82);
+              stopImages[i] = out; // data URI，自包含无需联网
+              applyStopBg(i);
+              const card = inp.closest('.editor-card');
+              const prev = card.querySelector('.bg-preview');
+              prev.src = out;
+              prev.classList.add('show');
+              card.querySelector('.bg-clear').style.display = '';
+              persistEdits(); // 上传即保存，刷新不丢
+            };
+            imgEl.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      editorCards.querySelectorAll('.bg-clear').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.i, 10);
+          stopImages[i] = null;
+          applyStopBg(i);
+          const card = btn.closest('.editor-card');
+          const prev = card.querySelector('.bg-preview');
+          prev.src = '';
+          prev.classList.remove('show');
+          btn.style.display = 'none';
+          card.querySelector('.bg-img-input').value = '';
+          persistEdits();
+        });
+      });
+
+      // 绑定圈三的音乐上传与移除
+      editorCards.querySelectorAll('.bg-audio-input').forEach(inp => {
+        inp.addEventListener('change', (e) => {
+          const i = parseInt(inp.dataset.i, 10);
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            stopAudio[i] = reader.result; // data URI，自包含无需联网
+            const card = inp.closest('.editor-card');
+            card.querySelector('.bg-audio-clear').style.display = '';
+            persistEdits();
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+      editorCards.querySelectorAll('.bg-audio-clear').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.i, 10);
+          stopAudio[i] = null;
+          const card = btn.closest('.editor-card');
+          card.querySelector('.bg-audio-input').value = '';
+          btn.style.display = 'none';
+          persistEdits();
+        });
+      });
+    }
+
+    function openEditor() { editorPanel.classList.add('open'); }
+    function closeEditor() { editorPanel.classList.remove('open'); }
+
+    // 保存：把输入写回 stops，并把颜色/图片应用到弹窗背景；若弹窗正打开则立即刷新
+    function readEditorInputsIntoMemory() {
+      const inputs = editorCards.querySelectorAll('input, textarea');
+      inputs.forEach(inp => {
+        const i = parseInt(inp.dataset.i, 10);
+        const field = inp.dataset.field;
+        if (field === 'title') {
+          stops[i].title = inp.value;
+        } else if (field === 'content') {
+          stops[i].content = inp.value;
+        } else if (field === 'color') {
+          stopColors[i] = inp.value;
+        }
+      });
+    }
+
+    function saveEditor() {
+      readEditorInputsIntoMemory();
+      stopColors.forEach((_, i) => applyStopBg(i)); // 统一应用：有图用图，无图用色
+      if (modalOverlay.classList.contains('show') && modalStopIndex >= 0) {
+        openModal(modalStopIndex); // 用新内容/标题即时刷新弹窗
+      }
+      persistEdits();    // 写本地缓存（同浏览器刷新不丢）
+      exportBakedHTML(); // 立刻下载带好文字/背景/音乐的定稿文件（真正的留存）
+      closeEditor();
+    }
+
+    editorToggle.addEventListener('click', openEditor);
+    editorClose.addEventListener('click', closeEditor);
+    editorCancel.addEventListener('click', closeEditor);
+    editorSave.addEventListener('click', saveEditor);
+    document.getElementById('editorCacheOnly').addEventListener('click', () => {
+      readEditorInputsIntoMemory();
+      persistEdits(); // 只写本地缓存，不下载；适合想先在本机试看的场景
+      closeEditor();
+    });
+
+    // 恢复默认：清除本地保存并重新加载初始内容
+    document.getElementById('editorReset').addEventListener('click', () => {
+      if (confirm('确定恢复为初始内容？这会清除你本地保存的所有文字 / 颜色 / 图片 / 音乐修改。')) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        location.reload();
+      }
+    });
+
+    buildEditorCards();
+    // ==========================================================================
+
+    // 初始化
+    resetTour();
+  </script>
+</body>
+</html>
